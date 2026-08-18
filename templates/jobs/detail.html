@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ job.job_id }}{% endblock %}
+{% block eyebrow %}{{ job.job_id }}{% endblock %}
+{% block heading %}{{ job.job_label }}{% endblock %}
+
+{% block content %}
+<section class="split">
+    <article class="panel">
+        <dl class="meta">
+            <div><dt>Requested by</dt><dd>{{ job.requested_by.label }}</dd></div>
+            <div><dt>Submitted</dt><dd>{{ job.submitted_date|date:"d M Y" }}</dd></div>
+            <div><dt>Priority</dt><dd><span class="pill prio-{{ job.effective_priority }}">{{ job.get_priority_display }}</span>{% if job.is_overdue %} <span class="pill status-abandoned">Overdue</span>{% endif %}</dd></div>
+            <div><dt>Status</dt><dd><span class="pill status-{{ job.status }}">{{ job.get_status_display }}</span></dd></div>
+            <div><dt>Project</dt><dd>{{ job.project }}</dd></div>
+            <div><dt>Part</dt><dd>{{ job.job_name }} · v{{ job.part_version }}</dd></div>
+            <div><dt>Quantity</dt><dd>{{ job.quantity }}</dd></div>
+            <div><dt>Panel</dt><dd>{{ job.panel.name }}</dd></div>
+            <div><dt>Deadline</dt><dd>{{ job.deadline|date:"d M Y" }}</dd></div>
+            <div><dt>Destination</dt><dd>{{ job.destination }}</dd></div>
+            <div><dt>Primary machinist</dt><dd>{{ job.machinist_primary.label|default:"—" }}</dd></div>
+            <div><dt>Secondary machinist</dt><dd>{{ job.machinist_secondary.label|default:"—" }}</dd></div>
+            <div><dt>Started</dt><dd>{{ job.started_at|date:"d M Y H:i"|default:"—" }}</dd></div>
+            <div><dt>Finished</dt><dd>{{ job.finished_at|date:"d M Y H:i"|default:"—" }}</dd></div>
+            <div><dt>Panel used</dt><dd>{{ job.panel_used|default:"—" }}</dd></div>
+        </dl>
+        <h3>Engineer notes</h3>
+        <p>{{ job.notes }}</p>
+        {% if job.machinist_notes %}<h3>Machinist notes</h3><p>{{ job.machinist_notes }}</p>{% endif %}
+        {% if job.cancel_reason %}<h3>Cancel reason</h3><p>{{ job.cancel_reason }}</p>{% endif %}
+        {% if job.overdue_reason %}<h3>Overdue reason</h3><p>{{ job.overdue_reason }}</p>{% endif %}
+
+        <h3>Files</h3>
+        <p class="files">
+            <a class="file-link" href="{% url 'jobs:file' job.job_id 'pdf' %}">{{ job.pdf_filename }}</a>
+            <a class="file-link" href="{% url 'jobs:file' job.job_id 'dxf' %}">{{ job.dxf_filename }}</a>
+            <a class="file-link" href="{% url 'jobs:file' job.job_id 'vcarve' %}">{{ job.vcarve_filename }}</a>
+        </p>
+        <iframe class="pdf-preview" src="{% url 'jobs:file' job.job_id 'pdf' %}" title="PDF drawing"></iframe>
+        {% if job.can_edit_submission %}
+        <div class="inline-actions">
+            <a class="file-link" href="{% url 'jobs:edit' job.job_id %}">Edit job</a>
+        </div>
+        {% endif %}
+    </article>
+
+    <aside class="panel">
+        {% if job.is_open %}
+        <h2>Update this job</h2>
+        <p class="hint">Either machinist can edit these fields. Start machining stamps the time. Material must be in stock before a job can leave queued / on hold.</p>
+        <form method="post" action="{% url 'jobs:update' job.job_id %}">
+            {% csrf_token %}
+            {{ update_form.as_p }}
+            <div class="inline-actions">
+                <button name="action" value="save">Save</button>
+                <button name="action" value="start" class="primary">Start machining</button>
+                <button name="action" value="complete">Complete</button>
+                <button name="action" value="hold">On hold</button>
+                <button name="action" value="abandon" class="danger">Abandon</button>
+            </div>
+        </form>
+        {% endif %}
+
+        {% if job.can_edit_submission %}
+        <h2>Cancel / withdraw</h2>
+        <form method="post" action="{% url 'jobs:update' job.job_id %}">
+            {% csrf_token %}
+            {{ cancel_form.as_p }}
+            <button name="action" value="cancel" class="danger">Cancel job</button>
+        </form>
+        {% endif %}
+    </aside>
+</section>
+{% endblock %}

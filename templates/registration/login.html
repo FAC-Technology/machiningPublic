@@ -1,0 +1,45 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in · Machine shop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body class="login-body">
+    <main class="login-card">
+        <div class="brand">
+            <span class="brand-mark">MQ</span>
+            <div>
+                <strong>Machine shop</strong>
+                <small>Queue &amp; rota</small>
+            </div>
+        </div>
+        <h1>Sign in</h1>
+        <p>Engineers submit jobs with drawings. Machinists run the queue and the four-day rota.</p>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            <label>
+                Username
+                <input type="text" name="username" autocomplete="username" required>
+            </label>
+            <label>
+                Password
+                <input type="password" name="password" autocomplete="current-password" required>
+            </label>
+            <button type="submit" class="primary">Enter shop</button>
+        </form>
+        <aside class="demo-accounts">
+            <h2>Demo accounts</h2>
+            <p><code>hasan</code> / <code>Design!23</code> — engineer</p>
+            <p><code>priya</code> / <code>MillPass!23</code> — machinist</p>
+            <p><code>admin</code> / <code>AdminPass!23</code> — both</p>
+        </aside>
+    </main>
+</body>
+</html>

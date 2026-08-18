@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{% if history %}History{% else %}Queue{% endif %}{% endblock %}
+{% block eyebrow %}{% if history %}Finished jobs{% else %}Shop floor{% endif %}{% endblock %}
+{% block heading %}{% if history %}Job history{% else %}Current machining queue{% endif %}{% endblock %}
+
+{% block content %}
+<section class="panel">
+    {% if history %}
+    <p class="lede">Completed, abandoned, and cancelled jobs stay here. Abandoned jobs cannot be restarted — submit a new one.</p>
+    {% else %}
+    <p class="lede">Open jobs only. Overdue jobs stay here and jump to urgent until they are finished or cancelled. Sort by priority then deadline, or by when they were submitted.</p>
+    {% endif %}
+    {% include "includes/filters.html" %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Job ID</th>
+                    <th>Job</th>
+                    <th>Priority</th>
+                    <th>By</th>
+                    <th>Qty</th>
+                    <th>Panel</th>
+                    <th>Deadline</th>
+                    <th>Destination</th>
+                    <th>Machinists</th>
+                    <th>Status</th>
+                    {% if not history %}<th></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr class="{% if job.is_overdue %}is-overdue{% endif %}">
+                    <td class="mono"><a href="{% url 'jobs:detail' job.job_id %}">{{ job.job_id }}</a></td>
+                    <td>
+                        <strong>{{ job.job_name }}</strong>
+                        <small class="muted">{{ job.job_label }}</small>
+                    </td>
+                    <td>
+                        <span class="pill prio-{{ job.effective_priority }}">{{ job.get_priority_display }}</span>
+                        {% if job.is_overdue %}<span class="pill status-abandoned">Overdue</span>{% endif %}
+                    </td>
+                    <td>{{ job.requested_by.initials }}</td>
+                    <td>{{ job.quantity }}</td>
+                    <td>{{ job.panel.name }}</td>
+                    <td>{{ job.deadline|date:"d M Y" }}</td>
+                    <td>{{ job.destination }}</td>
+                    <td>
+                        {{ job.machinist_primary.initials|default:"—" }}
+                        {% if job.machinist_secondary %} / {{ job.machinist_secondary.initials }}{% endif %}
+                    </td>
+                    <td><span class="pill status-{{ job.status }}">{{ job.get_status_display }}</span></td>
+                    {% if not history %}
+                    <td>
+                        <form method="post" action="{% url 'jobs:update' job.job_id %}" class="inline-actions">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            {% if job.status != "in_progress" %}
+                            <button name="action" value="start">Start machining</button>
+                            {% else %}
+                            <button name="action" value="complete">Complete</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr><td colspan="11">{% if history %}No finished jobs yet.{% else %}The queue is empty.{% endif %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

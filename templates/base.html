@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>{% block title %}Machining queue{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem("mq-theme");
+                if (theme === "light" || theme === "dark") {
+                    document.documentElement.setAttribute("data-theme", theme);
+                }
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body>
+    <aside class="shell-nav">
+        <div class="brand">
+            <span class="brand-mark">MQ</span>
+            <div>
+                <strong>Machine shop</strong>
+                <small>Queue</small>
+            </div>
+        </div>
+
+        <form method="post" action="{% url 'jobs:whoami' %}" class="whoami">
+            {% csrf_token %}
+            <label>
+                Working as
+                <select name="person" onchange="this.form.submit()">
+                    <option value="">Select initials</option>
+                    {% for person in all_people %}
+                    <option value="{{ person.id }}" {% if current_person.id == person.id %}selected{% endif %}>{{ person.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            {% if current_person %}
+            <small>{{ current_person.role_summary }}</small>
+            {% else %}
+            <small>Pick your initials so jobs are stamped with the right name.</small>
+            {% endif %}
+        </form>
+
+        <nav>
+            {% if show_submit %}
+            <a href="{% url 'jobs:submit' %}" class="{% if request.resolver_match.url_name == 'submit' or request.resolver_match.url_name == 'edit' %}is-active{% endif %}">Submit job</a>
+            {% endif %}
+            <a href="{% url 'jobs:queue' %}" class="{% if request.resolver_match.url_name == 'queue' %}is-active{% endif %}">Queue</a>
+            <a href="{% url 'jobs:history' %}" class="{% if request.resolver_match.url_name == 'history' %}is-active{% endif %}">History</a>
+            <a href="{% url 'jobs:setup' %}" class="{% if request.resolver_match.url_name == 'setup' %}is-active{% endif %}">People &amp; panels</a>
+        </nav>
+    </aside>
+
+    <div class="shell-main">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">{% block eyebrow %}Workshop{% endblock %}</p>
+                <h1>{% block heading %}Machining queue{% endblock %}</h1>
+            </div>
+            <div class="theme-toggle" role="group" aria-label="Colour theme">
+                <button type="button" data-theme-value="dark">Dark</button>
+                <button type="button" data-theme-value="light">Light</button>
+            </div>
+        </header>
+
+        {% if messages %}
+        <ul class="flash">
+            {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>

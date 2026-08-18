@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Rota{% endblock %}
+{% block eyebrow %}Cover{% endblock %}
+{% block heading %}Four-day machining rota{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="week-nav">
+        <a href="?week={{ prev_week|date:'Y-m-d' }}">Previous week</a>
+        <strong>Week of {{ week_start|date:"d M Y" }}</strong>
+        <a href="?week={{ next_week|date:'Y-m-d' }}">Next week</a>
+    </div>
+    <p class="lede">Two people on the machines each day, Monday to Thursday. Assignments can be changed whenever cover needs to move.</p>
+
+    <form method="post" action="{% url 'rota:save' %}">
+        {% csrf_token %}
+        <input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
+        <div class="table-wrap">
+            <table class="rota-table">
+                <thead>
+                    <tr>
+                        <th>Day</th>
+                        <th>Machinist 1</th>
+                        <th>Machinist 2</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in grid %}
+                    <tr class="{% if row.date == today %}is-today{% endif %}">
+                        <td>
+                            <strong>{{ row.date|date:"l" }}</strong>
+                            <small class="muted">{{ row.date|date:"d M Y" }}</small>
+                        </td>
+                        <td>
+                            {% if can_edit %}
+                            <select name="slot-{{ row.date|date:'Y-m-d' }}-1">
+                                <option value="">Unassigned</option>
+                                {% for person in machinists %}
+                                <option value="{{ person.id }}" {% if row.slot_1.id == person.id %}selected{% endif %}>{{ person.label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            {{ row.slot_1.label|default:"Unassigned" }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if can_edit %}
+                            <select name="slot-{{ row.date|date:'Y-m-d' }}-2">
+                                <option value="">Unassigned</option>
+                                {% for person in machinists %}
+                                <option value="{{ person.id }}" {% if row.slot_2.id == person.id %}selected{% endif %}>{{ person.label }}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            {{ row.slot_2.label|default:"Unassigned" }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if can_edit %}
+                            <input type="text" name="notes-{{ row.date|date:'Y-m-d' }}" value="{{ row.notes }}" placeholder="Shift note">
+                            {% else %}
+                            {{ row.notes|default:"—" }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if can_edit %}
+        <div class="inline-actions">
+            <button type="submit" class="primary">Save rota</button>
+        </div>
+        {% endif %}
+    </form>
+
+    {% if can_edit %}
+    <form method="post" action="{% url 'rota:suggest' %}" class="suggest">
+        {% csrf_token %}
+        <input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
+        <button type="submit">Fill week with rotating pairs</button>
+    </form>
+    {% endif %}
+</section>
+{% endblock %}

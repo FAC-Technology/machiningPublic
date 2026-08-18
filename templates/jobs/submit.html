@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{% if editing %}Edit {{ editing.job_id }}{% else %}Submit a job{% endif %}{% endblock %}
+{% block eyebrow %}Engineer{% endblock %}
+{% block heading %}{% if editing %}Edit {{ editing.job_label }}{% else %}Submit a machining job{% endif %}{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <p class="lede">Drop the three drawing files into one box. The page checks each type and shows which of PDF, DXF, and VCarve are attached. Submission date is stored as today. Deadline defaults to a week from today.</p>
+    <form method="post" class="job-form" id="job-form" enctype="multipart/form-data" data-editing="{% if editing %}1{% else %}0{% endif %}">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="grid-3">
+            <label>Requested by {{ form.requested_by }} {{ form.requested_by.errors }}</label>
+            <label>Priority {{ form.priority }} {{ form.priority.errors }}</label>
+            <label>Deadline {{ form.deadline }} {{ form.deadline.errors }}</label>
+            <label>Project {{ form.project }} {{ form.project.errors }}</label>
+            <label>Part number {{ form.job_name }} {{ form.job_name.errors }}</label>
+            <label>Part version {{ form.part_version }} {{ form.part_version.errors }}</label>
+            <label>Quantity (1–100) {{ form.quantity }} {{ form.quantity.errors }}</label>
+            <label>Material / panel {{ form.panel }} {{ form.panel.errors }}</label>
+            <label>Destination
+                {{ form.destination }}
+                <datalist id="destination-options">
+                    {% for option in form.destination_units %}
+                    <option value="{{ option }}"></option>
+                    {% endfor %}
+                    {% if form.destination_initials %}
+                    <option value="{{ form.destination_initials }}" data-initials="1"></option>
+                    {% endif %}
+                </datalist>
+                {{ form.destination.errors }}
+            </label>
+        </div>
+        <label>Notes {{ form.notes }} {{ form.notes.errors }}</label>
+        <label class="stock">{{ form.materials_present }} {{ form.materials_present.label }}</label>
+
+        <div class="drop-zone" id="drop-zone" tabindex="0">
+            <strong>Drop the PDF, DXF, and VCarve files here</strong>
+            <p class="hint" id="drop-message">You can drop all three at once, or add them one at a time. Click to choose files.</p>
+            <input type="file" id="file-picker" multiple accept=".pdf,.dxf,.crv,.crv3d">
+            <div class="file-inputs">
+                {{ form.drawing_pdf }}
+                {{ form.drawing_dxf }}
+                {{ form.vcarve_file }}
+            </div>
+            <ul class="file-status" id="file-status">
+                <li data-kind="pdf" class="{% if editing.pdf_filename %}is-ready{% endif %}">PDF: {% if editing.pdf_filename %}{{ editing.pdf_filename }}{% else %}not added{% endif %}</li>
+                <li data-kind="dxf" class="{% if editing.dxf_filename %}is-ready{% endif %}">DXF: {% if editing.dxf_filename %}{{ editing.dxf_filename }}{% else %}not added{% endif %}</li>
+                <li data-kind="vcarve" class="{% if editing.vcarve_filename %}is-ready{% endif %}">VCarve: {% if editing.vcarve_filename %}{{ editing.vcarve_filename }}{% else %}not added{% endif %}</li>
+            </ul>
+            {{ form.drawing_pdf.errors }}
+            {{ form.drawing_dxf.errors }}
+            {{ form.vcarve_file.errors }}
+        </div>
+
+        {% if form.duplicates or form.acknowledge_duplicate.errors %}
+        <div class="warn-box">
+            <p>This looks like a job that is already on the system.</p>
+            {% for item in form.duplicates %}
+            <p><a href="{% url 'jobs:detail' item.job_id %}">{{ item.job_id }} · {{ item.job_label }}</a> ({{ item.get_status_display }})</p>
+            {% endfor %}
+            <label class="stock">{{ form.acknowledge_duplicate }} {{ form.acknowledge_duplicate.label }} {{ form.acknowledge_duplicate.errors }}</label>
+        </div>
+        {% endif %}
+
+        <button type="submit" class="primary">{% if editing %}Save changes{% else %}Add to queue{% endif %}</button>
+    </form>
+</section>
+{% endblock %}

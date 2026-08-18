@@ -1,0 +1,35 @@
+<form class="filters" method="get">
+    <label>
+        Search
+        <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Job, project, initials, panel">
+    </label>
+    <label>
+        Status
+        <select name="status">
+            <option value="">All</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Priority
+        <select name="priority">
+            <option value="">All</option>
+            {% for value, label in priority_choices %}
+            <option value="{{ value }}" {% if request.GET.priority == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Sort
+        <select name="sort">
+            <option value="priority" {% if request.GET.sort == "priority" or not request.GET.sort %}selected{% endif %}>Priority then deadline</option>
+            <option value="deadline" {% if request.GET.sort == "deadline" %}selected{% endif %}>Deadline</option>
+            <option value="submitted" {% if request.GET.sort == "submitted" %}selected{% endif %}>When submitted</option>
+            <option value="name" {% if request.GET.sort == "name" %}selected{% endif %}>Part number</option>
+            <option value="status" {% if request.GET.sort == "status" %}selected{% endif %}>Status</option>
+        </select>
+    </label>
+    <button type="submit" class="primary">Apply</button>
+</form>
