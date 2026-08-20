@@ -82,5 +82,5 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024
 # Example: [r"Z:\\Machining"]
 SHARED_DRIVE_ROOTS = []
 
-# Machining week is Monday–Thursday. Rota UI comes later.
+# Machining week is Monday–Thursday.
 ROTA_WEEKDAY_INDEXES = (0, 1, 2, 3)

@@ -5,12 +5,11 @@
 
 {% block content %}
 <section class="panel">
-    <p class="lede">Drop the three drawing files into one box. The page checks each type and shows which of PDF, DXF, and VCarve are attached. Submission date is stored as today. Deadline defaults to a week from today.</p>
+    <p class="lede">Drop the three drawing files into one box. The page checks each type and shows which of PDF, DXF, and VCarve are attached. Submission date is stored as today. Deadline defaults to a week from today. Notes are optional.</p>
     <form method="post" class="job-form" id="job-form" enctype="multipart/form-data" data-editing="{% if editing %}1{% else %}0{% endif %}">
         {% csrf_token %}
         {{ form.non_field_errors }}
         <div class="grid-3">
-            <label>Requested by {{ form.requested_by }} {{ form.requested_by.errors }}</label>
             <label>Priority {{ form.priority }} {{ form.priority.errors }}</label>
             <label>Deadline {{ form.deadline }} {{ form.deadline.errors }}</label>
             <label>Project {{ form.project }} {{ form.project.errors }}</label>
@@ -18,21 +17,9 @@
             <label>Part version {{ form.part_version }} {{ form.part_version.errors }}</label>
             <label>Quantity (1–100) {{ form.quantity }} {{ form.quantity.errors }}</label>
             <label>Material / panel {{ form.panel }} {{ form.panel.errors }}</label>
-            <label>Destination
-                {{ form.destination }}
-                <datalist id="destination-options">
-                    {% for option in form.destination_units %}
-                    <option value="{{ option }}"></option>
-                    {% endfor %}
-                    {% if form.destination_initials %}
-                    <option value="{{ form.destination_initials }}" data-initials="1"></option>
-                    {% endif %}
-                </datalist>
-                {{ form.destination.errors }}
-            </label>
+            <label>Destination {{ form.destination }} {{ form.destination.errors }}</label>
         </div>
-        <label>Notes {{ form.notes }} {{ form.notes.errors }}</label>
-        <label class="stock">{{ form.materials_present }} {{ form.materials_present.label }}</label>
+        <label>Notes (optional) {{ form.notes }} {{ form.notes.errors }}</label>
 
         <div class="drop-zone" id="drop-zone" tabindex="0">
             <strong>Drop the PDF, DXF, and VCarve files here</strong>

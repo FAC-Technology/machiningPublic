@@ -15,12 +15,18 @@ class Person(models.Model):
     class Meta:
         ordering = ["initials"]
 
+    def save(self, *args, **kwargs):
+        self.initials = (self.initials or "").strip().upper()
+        if not (self.name or "").strip():
+            self.name = self.initials
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.initials} · {self.name}"
+        return self.initials
 
     @property
     def label(self):
-        return f"{self.initials} · {self.name}"
+        return self.initials
 
     def role_summary(self):
         roles = []
@@ -45,6 +51,17 @@ class Panel(models.Model):
 
 
 class Project(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Destination(models.Model):
     name = models.CharField(max_length=120, unique=True)
     is_active = models.BooleanField(default=True)
 
@@ -107,9 +124,9 @@ class Job(models.Model):
     panel = models.ForeignKey(Panel, on_delete=models.PROTECT, related_name="jobs")
     deadline = models.DateField()
     destination = models.CharField(max_length=200)
-    notes = models.TextField()
+    notes = models.TextField(blank=True)
 
-    folder_path = models.CharField(max_length=500, blank=True)
+    folder_path = models.CharField(max_length=1000, blank=True)
     pdf_filename = models.CharField(max_length=260, blank=True)
     dxf_filename = models.CharField(max_length=260, blank=True)
     vcarve_filename = models.CharField(max_length=260, blank=True)
@@ -176,6 +193,8 @@ class Job(models.Model):
         super().clean()
         if self.quantity < 1 or self.quantity > 100:
             raise ValidationError({"quantity": "Quantity must be between 1 and 100."})
+        if not self.pk and self.deadline and self.deadline < timezone.localdate():
+            raise ValidationError({"deadline": "Deadline cannot be before today."})
 
     @property
     def is_overdue(self):
@@ -194,6 +213,14 @@ class Job(models.Model):
 
     def effective_priority(self):
         return self.Priority.URGENT if self.is_overdue else self.priority
+
+    @property
+    def submitted_files(self):
+        return [
+            ("pdf", "PDF", self.pdf_filename),
+            ("dxf", "DXF", self.dxf_filename),
+            ("vcarve", "VCarve", self.vcarve_filename),
+        ]
 
 
 def _token(value):

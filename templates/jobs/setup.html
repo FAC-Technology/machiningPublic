@@ -7,19 +7,18 @@
 <section class="split">
     <article class="panel">
         <h2>People</h2>
-        <p class="lede">Identified by initials. Someone can be engineer and machinist. Hasan should be all three.</p>
+        <p class="lede">People are identified by initials only. Someone can be engineer and machinist.</p>
         <form method="post" class="job-form">
             {% csrf_token %}
             {{ person_form.as_p }}
             <button type="submit" name="add_person" class="primary">Add person</button>
         </form>
         <table>
-            <thead><tr><th>Initials</th><th>Name</th><th>Roles</th><th></th></tr></thead>
+            <thead><tr><th>Initials</th><th>Roles</th><th></th></tr></thead>
             <tbody>
                 {% for person in people %}
                 <tr>
-                    <td class="mono">{{ person.initials }}</td>
-                    <td>{{ person.name }}{% if not person.is_active %} (inactive){% endif %}</td>
+                    <td class="mono">{{ person.initials }}{% if not person.is_active %} (inactive){% endif %}</td>
                     <td>{{ person.role_summary }}</td>
                     <td>
                         <form method="post" action="{% url 'jobs:toggle_person' person.pk %}">
@@ -78,6 +77,32 @@
                     <form method="post" action="{% url 'jobs:delete_project' project.pk %}">
                         {% csrf_token %}
                         <button type="submit" class="danger" onclick="return confirm('Delete project {{ project.name }}?')">Delete</button>
+                    </form>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="panel">
+        <h2>Destinations</h2>
+        <p class="lede">Destination dropdown on the submit form. Start with Unit 1, Unit 2, and Unit 4. The submitter's initials are also offered automatically.</p>
+        <form method="post" class="job-form">
+            {% csrf_token %}
+            {{ destination_form.as_p }}
+            <button type="submit" name="add_destination" class="primary">Add destination</button>
+        </form>
+        <ul class="plain-list">
+            {% for destination in destinations %}
+            <li>
+                <span>{{ destination.name }}{% if not destination.is_active %} (inactive){% endif %}</span>
+                <span class="row-actions">
+                    <form method="post" action="{% url 'jobs:toggle_destination' destination.pk %}">
+                        {% csrf_token %}
+                        <button type="submit">{% if destination.is_active %}Hide{% else %}Show{% endif %}</button>
+                    </form>
+                    <form method="post" action="{% url 'jobs:delete_destination' destination.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="danger" onclick="return confirm('Delete destination {{ destination.name }}?')">Delete</button>
                     </form>
                 </span>
             </li>

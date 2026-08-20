@@ -125,35 +125,6 @@ if (form) {
     });
 }
 
-function initialsFromRequestedBy() {
-    const select = document.getElementById("id_requested_by");
-    if (!select || !select.selectedOptions.length) return "";
-    return select.selectedOptions[0].text.split("·")[0].trim();
-}
-
-function syncInitialsDestination() {
-    const list = document.getElementById("destination-options");
-    if (!list) return;
-    const initials = initialsFromRequestedBy();
-    let option = list.querySelector("option[data-initials='1']");
-    if (!initials) {
-        if (option) option.remove();
-        return;
-    }
-    if (!option) {
-        option = document.createElement("option");
-        option.dataset.initials = "1";
-        list.appendChild(option);
-    }
-    option.value = initials;
-}
-
-const requestedBy = document.getElementById("id_requested_by");
-if (requestedBy) {
-    requestedBy.addEventListener("change", syncInitialsDestination);
-    syncInitialsDestination();
-}
-
 const THEME_KEY = "mq-theme";
 
 function currentTheme() {
@@ -175,28 +146,68 @@ document.querySelectorAll(".theme-toggle [data-theme-value]").forEach((button) =
     button.addEventListener("click", () => applyTheme(button.dataset.themeValue));
 });
 
-function selectPartNumberDigits(input) {
-    const match = input.value.match(/^(PN-)(\d+)$/i);
-    if (!match) return false;
-    const start = match[1].length;
-    input.setSelectionRange(start, input.value.length);
-    return true;
+const PART_PREFIX = "PN-";
+const PART_WIDTH = 5;
+
+function partDigits(value) {
+    return (value || "").replace(/^PN-/i, "").replace(/\D/g, "");
 }
 
-const partNumber = document.getElementById("id_job_name");
-if (partNumber) {
-    partNumber.addEventListener("focus", () => {
-        partNumber.dataset.selectDigits = "1";
+function formatPartNumber(digits) {
+    return PART_PREFIX + (digits || "").slice(-PART_WIDTH).padStart(PART_WIDTH, "0");
+}
+
+function bindPartNumber(input) {
+    if (!input) return;
+
+    function apply(digits) {
+        input.value = formatPartNumber(digits);
+        const pos = input.value.length;
+        input.setSelectionRange(pos, pos);
+    }
+
+    input.addEventListener("focus", () => {
         requestAnimationFrame(() => {
-            if (partNumber.dataset.selectDigits === "1") selectPartNumberDigits(partNumber);
+            const start = PART_PREFIX.length;
+            input.setSelectionRange(start, input.value.length);
         });
     });
-    partNumber.addEventListener("mouseup", (event) => {
-        if (partNumber.dataset.selectDigits !== "1") return;
-        if (selectPartNumberDigits(partNumber)) event.preventDefault();
-        partNumber.dataset.selectDigits = "";
+
+    input.addEventListener("keydown", (event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key >= "0" && event.key <= "9") {
+            event.preventDefault();
+            apply(partDigits(input.value) + event.key);
+            return;
+        }
+        if (event.key === "Backspace" || event.key === "Delete") {
+            event.preventDefault();
+            apply(partDigits(input.value).slice(0, -1));
+        }
     });
-    partNumber.addEventListener("blur", () => {
-        partNumber.dataset.selectDigits = "";
+
+    input.addEventListener("paste", (event) => {
+        event.preventDefault();
+        const text = (event.clipboardData || window.clipboardData).getData("text");
+        apply(partDigits(text));
+    });
+
+    input.addEventListener("blur", () => {
+        apply(partDigits(input.value));
     });
 }
+
+bindPartNumber(document.getElementById("id_job_name"));
+
+function bindMachinistChoice() {
+    const select = document.getElementById("id_machinist_choice");
+    const otherRow = document.getElementById("machinist-other-row");
+    if (!select || !otherRow) return;
+    function sync() {
+        otherRow.hidden = select.value !== "other";
+    }
+    select.addEventListener("change", sync);
+    sync();
+}
+
+bindMachinistChoice();

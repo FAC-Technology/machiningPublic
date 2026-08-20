@@ -8,9 +8,17 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .files import job_file, write_job_files
-from .forms import CancelForm, JobSubmitForm, MachinistUpdateForm, PanelForm, PersonForm, ProjectForm
+from .forms import (
+    CancelForm,
+    DestinationForm,
+    JobSubmitForm,
+    MachinistUpdateForm,
+    PanelForm,
+    PersonForm,
+    ProjectForm,
+)
 from .identity import current_person, set_current_person
-from .models import Job, Panel, Person, Project
+from .models import Destination, Job, Panel, Person, Project
 
 SORT_MAP = {
     "priority": None,
@@ -25,6 +33,16 @@ def _require_person(request):
     person = current_person(request)
     if not person:
         messages.error(request, "Select your initials first (top of the sidebar).")
+        return None
+    return person
+
+
+def _require_admin(request):
+    person = _require_person(request)
+    if not person:
+        return None
+    if not person.is_admin:
+        messages.error(request, "Only an admin can change people, panels, and projects.")
         return None
     return person
 
@@ -73,15 +91,10 @@ def choose_person(request):
 
 def submit_page(request, job=None):
     person = current_person(request)
-    initial = {}
-    if person and person.is_engineer and job is None:
-        initial["requested_by"] = person.pk
-
     form = JobSubmitForm(
         request.POST or None,
         request.FILES or None,
         instance=job,
-        initial=initial,
         current_person=person,
     )
     if request.method == "POST":
@@ -207,11 +220,20 @@ def update_job(request, job_id):
         messages.error(request, "Give a reason to cancel the job.")
         return redirect("jobs:detail", job_id=job.job_id)
 
-    form = MachinistUpdateForm(request.POST, instance=job)
-    detail_fields = {"machinist_notes", "panel_used", "machinist_primary", "machinist_secondary", "overdue_reason", "materials_present"}
-    if detail_fields & set(request.POST.keys()):
-        if form.is_valid():
-            job = form.save(commit=False)
+    if "machinist_choice" in request.POST:
+        form = MachinistUpdateForm(request.POST, instance=job)
+        if not form.is_valid():
+            messages.error(request, "Check the machinist field and try again.")
+            return render(
+                request,
+                "jobs/detail.html",
+                {
+                    "job": job,
+                    "update_form": form,
+                    "cancel_form": CancelForm(),
+                },
+            )
+        job = form.save(commit=False)
 
     if job.is_overdue and not (job.overdue_reason or "").strip() and action in {"start", "complete", "hold"}:
         messages.error(request, "This job missed its deadline. Add an overdue reason before continuing.")
@@ -223,15 +245,15 @@ def update_job(request, job_id):
             job.save()
             messages.error(request, "Material is not marked as in stock, so the job is on hold.")
             return redirect("jobs:detail", job_id=job.job_id)
-        if actor.is_machinist:
-            if not job.machinist_primary:
-                job.machinist_primary = actor
-            elif job.machinist_primary_id != actor.id and not job.machinist_secondary:
-                job.machinist_secondary = actor
+        if actor.is_machinist and not job.machinist_primary:
+            job.machinist_primary = actor
         job.status = Job.Status.IN_PROGRESS
         job.started_at = job.started_at or timezone.now()
         job.finished_at = None
     elif action == "complete":
+        if not job.started_at:
+            messages.error(request, "Start machining before completing the job.")
+            return redirect("jobs:detail", job_id=job.job_id)
         if job.status == Job.Status.ABANDONED:
             messages.error(request, "Abandoned jobs cannot be restarted. Submit a new job.")
             return redirect("jobs:detail", job_id=job.job_id)
@@ -241,23 +263,17 @@ def update_job(request, job_id):
     elif action == "abandon":
         job.status = Job.Status.ABANDONED
         job.finished_at = timezone.now()
-        if not (job.machinist_notes or "").strip():
-            messages.error(request, "Add a note explaining why the job was abandoned.")
-            return redirect("jobs:detail", job_id=job.job_id)
     elif action == "hold":
         job.status = Job.Status.ON_HOLD
         job.materials_present = False
-    elif action == "save":
-        if job.materials_present and job.status == Job.Status.ON_HOLD and not job.started_at:
-            job.status = Job.Status.QUEUED
-        elif not job.materials_present and job.status == Job.Status.QUEUED:
-            job.status = Job.Status.ON_HOLD
 
     job.save()
     messages.success(request, f"{job.job_id} updated.")
     if job.status in (Job.Status.COMPLETED, Job.Status.ABANDONED, Job.Status.CANCELLED):
         return redirect("jobs:history")
-    return redirect(request.POST.get("next") or "jobs:queue")
+    if request.POST.get("next"):
+        return redirect(request.POST.get("next"))
+    return redirect("jobs:detail", job_id=job.job_id)
 
 
 def job_file_view(request, job_id, kind):
@@ -272,9 +288,12 @@ def job_file_view(request, job_id, kind):
 
 
 def setup_page(request):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     person_form = PersonForm(prefix="person")
     panel_form = PanelForm(prefix="panel")
     project_form = ProjectForm(prefix="project")
+    destination_form = DestinationForm(prefix="destination")
     if request.method == "POST":
         if "add_person" in request.POST:
             person_form = PersonForm(request.POST, prefix="person")
@@ -294,6 +313,12 @@ def setup_page(request):
                 project_form.save()
                 messages.success(request, "Project added.")
                 return redirect("jobs:setup")
+        elif "add_destination" in request.POST:
+            destination_form = DestinationForm(request.POST, prefix="destination")
+            if destination_form.is_valid():
+                destination_form.save()
+                messages.success(request, "Destination added.")
+                return redirect("jobs:setup")
     return render(
         request,
         "jobs/setup.html",
@@ -301,15 +326,19 @@ def setup_page(request):
             "person_form": person_form,
             "panel_form": panel_form,
             "project_form": project_form,
+            "destination_form": destination_form,
             "people": Person.objects.all(),
             "panels": Panel.objects.all(),
             "projects": Project.objects.all(),
+            "destinations": Destination.objects.all(),
         },
     )
 
 
 @require_POST
 def toggle_person(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     person = get_object_or_404(Person, pk=pk)
     person.is_active = not person.is_active
     person.save(update_fields=["is_active"])
@@ -318,6 +347,8 @@ def toggle_person(request, pk):
 
 @require_POST
 def toggle_panel(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     panel = get_object_or_404(Panel, pk=pk)
     panel.is_active = not panel.is_active
     panel.save(update_fields=["is_active"])
@@ -326,6 +357,8 @@ def toggle_panel(request, pk):
 
 @require_POST
 def toggle_project(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     project = get_object_or_404(Project, pk=pk)
     project.is_active = not project.is_active
     project.save(update_fields=["is_active"])
@@ -334,6 +367,8 @@ def toggle_project(request, pk):
 
 @require_POST
 def delete_panel(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     panel = get_object_or_404(Panel, pk=pk)
     name = panel.name
     try:
@@ -350,6 +385,8 @@ def delete_panel(request, pk):
 
 @require_POST
 def delete_project(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
     project = get_object_or_404(Project, pk=pk)
     name = project.name
     try:
@@ -361,4 +398,32 @@ def delete_project(request, pk):
             request,
             f"Can't delete {name} — {count} job(s) still use it. Hide it instead, or change those jobs first.",
         )
+    return redirect("jobs:setup")
+
+
+@require_POST
+def toggle_destination(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
+    destination = get_object_or_404(Destination, pk=pk)
+    destination.is_active = not destination.is_active
+    destination.save(update_fields=["is_active"])
+    return redirect("jobs:setup")
+
+
+@require_POST
+def delete_destination(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
+    destination = get_object_or_404(Destination, pk=pk)
+    name = destination.name
+    count = Job.objects.filter(destination=name).count()
+    if count:
+        messages.error(
+            request,
+            f"Can't delete {name} — {count} job(s) still use it. Hide it instead, or change those jobs first.",
+        )
+        return redirect("jobs:setup")
+    destination.delete()
+    messages.success(request, f"Deleted destination {name}.")
     return redirect("jobs:setup")

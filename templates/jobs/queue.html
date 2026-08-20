@@ -23,7 +23,8 @@
                     <th>Panel</th>
                     <th>Deadline</th>
                     <th>Destination</th>
-                    <th>Machinists</th>
+                    <th>Files</th>
+                    <th>Machinist</th>
                     <th>Status</th>
                     {% if not history %}<th></th>{% endif %}
                 </tr>
@@ -46,9 +47,15 @@
                     <td>{{ job.deadline|date:"d M Y" }}</td>
                     <td>{{ job.destination }}</td>
                     <td>
-                        {{ job.machinist_primary.initials|default:"—" }}
-                        {% if job.machinist_secondary %} / {{ job.machinist_secondary.initials }}{% endif %}
+                        <div class="files">
+                            {% for kind, label, name in job.submitted_files %}
+                            {% if name %}
+                            <a class="file-link" href="{% url 'jobs:file' job.job_id kind %}">{{ label }}: {{ name }}</a>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
                     </td>
+                    <td>{{ job.machinist_primary.initials|default:"—" }}</td>
                     <td><span class="pill status-{{ job.status }}">{{ job.get_status_display }}</span></td>
                     {% if not history %}
                     <td>
@@ -65,7 +72,7 @@
                     {% endif %}
                 </tr>
                 {% empty %}
-                <tr><td colspan="11">{% if history %}No finished jobs yet.{% else %}The queue is empty.{% endif %}</td></tr>
+                <tr><td colspan="12">{% if history %}No finished jobs yet.{% else %}The queue is empty.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

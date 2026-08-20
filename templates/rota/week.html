@@ -10,7 +10,7 @@
         <strong>Week of {{ week_start|date:"d M Y" }}</strong>
         <a href="?week={{ next_week|date:'Y-m-d' }}">Next week</a>
     </div>
-    <p class="lede">Two people on the machines each day, Monday to Thursday. Assignments can be changed whenever cover needs to move.</p>
+    <p class="lede">Primary and secondary machinist for each day, Monday to Thursday. Everyone can see the rota; only an admin can change it.</p>
 
     <form method="post" action="{% url 'rota:save' %}">
         {% csrf_token %}
@@ -20,8 +20,8 @@
                 <thead>
                     <tr>
                         <th>Day</th>
-                        <th>Machinist 1</th>
-                        <th>Machinist 2</th>
+                        <th>Primary machinist</th>
+                        <th>Secondary machinist</th>
                         <th>Notes</th>
                     </tr>
                 </thead>
@@ -37,11 +37,11 @@
                             <select name="slot-{{ row.date|date:'Y-m-d' }}-1">
                                 <option value="">Unassigned</option>
                                 {% for person in machinists %}
-                                <option value="{{ person.id }}" {% if row.slot_1.id == person.id %}selected{% endif %}>{{ person.label }}</option>
+                                <option value="{{ person.id }}" {% if row.primary.id == person.id %}selected{% endif %}>{{ person.initials }}</option>
                                 {% endfor %}
                             </select>
                             {% else %}
-                            {{ row.slot_1.label|default:"Unassigned" }}
+                            {{ row.primary.initials|default:"Unassigned" }}
                             {% endif %}
                         </td>
                         <td>
@@ -49,11 +49,11 @@
                             <select name="slot-{{ row.date|date:'Y-m-d' }}-2">
                                 <option value="">Unassigned</option>
                                 {% for person in machinists %}
-                                <option value="{{ person.id }}" {% if row.slot_2.id == person.id %}selected{% endif %}>{{ person.label }}</option>
+                                <option value="{{ person.id }}" {% if row.secondary.id == person.id %}selected{% endif %}>{{ person.initials }}</option>
                                 {% endfor %}
                             </select>
                             {% else %}
-                            {{ row.slot_2.label|default:"Unassigned" }}
+                            {{ row.secondary.initials|default:"Unassigned" }}
                             {% endif %}
                         </td>
                         <td>

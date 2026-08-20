@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from jobs.models import Panel, Person, Project
+from jobs.models import Destination, Panel, Person, Project
 
 
 class Command(BaseCommand):
@@ -38,5 +38,8 @@ class Command(BaseCommand):
         for project_name in ["PRD", "P10", "P05"]:
             Project.objects.get_or_create(name=project_name)
 
-        self.stdout.write(self.style.SUCCESS("People, panels, and projects ready. Add the rest of the shop on /setup/."))
+        for destination_name in ["Unit 1", "Unit 2", "Unit 4"]:
+            Destination.objects.get_or_create(name=destination_name)
+
+        self.stdout.write(self.style.SUCCESS("People, panels, projects, and destinations ready. Add the rest of the shop on /setup/."))
         self.stdout.write("On Submit job, drag in a PDF, DXF, and VCarve file.")

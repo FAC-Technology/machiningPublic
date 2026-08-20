@@ -9,4 +9,5 @@ def nav_extras(request):
         "current_person": person,
         "all_people": Person.objects.filter(is_active=True),
         "show_submit": show_submit,
+        "show_setup": bool(person and person.is_admin),
     }
