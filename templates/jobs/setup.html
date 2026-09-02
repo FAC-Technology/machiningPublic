@@ -7,11 +7,21 @@
 <section class="split">
     <article class="panel">
         <h2>People</h2>
-        <p class="lede">People are identified by initials only. Someone can be engineer and machinist.</p>
         <form method="post" class="job-form">
             {% csrf_token %}
+            {% if editing_person %}
+            <input type="hidden" name="person_pk" value="{{ editing_person.pk }}">
+            <p class="hint">Editing {{ editing_person.initials }}</p>
+            {% endif %}
             {{ person_form.as_p }}
+            {% if editing_person %}
+            <div class="inline-actions">
+                <button type="submit" name="save_person" class="primary">Save person</button>
+                <a class="file-link" href="{% url 'jobs:setup' %}">Cancel</a>
+            </div>
+            {% else %}
             <button type="submit" name="add_person" class="primary">Add person</button>
+            {% endif %}
         </form>
         <table>
             <thead><tr><th>Initials</th><th>Roles</th><th></th></tr></thead>
@@ -21,10 +31,17 @@
                     <td class="mono">{{ person.initials }}{% if not person.is_active %} (inactive){% endif %}</td>
                     <td>{{ person.role_summary }}</td>
                     <td>
-                        <form method="post" action="{% url 'jobs:toggle_person' person.pk %}">
-                            {% csrf_token %}
-                            <button type="submit">{% if person.is_active %}Deactivate{% else %}Activate{% endif %}</button>
-                        </form>
+                        <span class="row-actions">
+                            <a class="file-link" href="{% url 'jobs:setup' %}?edit_person={{ person.pk }}">Edit</a>
+                            <form method="post" action="{% url 'jobs:toggle_person' person.pk %}">
+                                {% csrf_token %}
+                                <button type="submit">{% if person.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+                            </form>
+                            <form method="post" action="{% url 'jobs:delete_person' person.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="danger" onclick="return confirm('Delete {{ person.initials }}?')">Delete</button>
+                            </form>
+                        </span>
                     </td>
                 </tr>
                 {% endfor %}
@@ -33,7 +50,6 @@
     </article>
     <article class="panel">
         <h2>Panels</h2>
-        <p class="lede">Material dropdown on the submit form. Add R&amp;D panels here until batch codes exist. Unused panels stay here until you delete them.</p>
         <form method="post" class="job-form">
             {% csrf_token %}
             {{ panel_form.as_p }}
@@ -59,7 +75,6 @@
     </article>
     <article class="panel">
         <h2>Projects</h2>
-        <p class="lede">Project dropdown on the submit form. Start with PRD, P10, and P05, then add more here.</p>
         <form method="post" class="job-form">
             {% csrf_token %}
             {{ project_form.as_p }}
@@ -85,7 +100,6 @@
     </article>
     <article class="panel">
         <h2>Destinations</h2>
-        <p class="lede">Destination dropdown on the submit form. Start with Unit 1, Unit 2, and Unit 4. The submitter's initials are also offered automatically.</p>
         <form method="post" class="job-form">
             {% csrf_token %}
             {{ destination_form.as_p }}

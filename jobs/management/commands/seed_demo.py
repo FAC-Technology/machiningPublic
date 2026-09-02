@@ -35,7 +35,7 @@ class Command(BaseCommand):
         ]:
             Panel.objects.get_or_create(name=panel_name)
 
-        for project_name in ["PRD", "P10", "P05"]:
+        for project_name in ["PRD", "P10", "P05", "R&D"]:
             Project.objects.get_or_create(name=project_name)
 
         for destination_name in ["Unit 1", "Unit 2", "Unit 4"]:

@@ -5,7 +5,18 @@ __pycache__/
 db.sqlite3
 media/
 staticfiles/
-.env
 *.egg-info/
 .DS_Store
 Thumbs.db
+
+"""# Shop secrets — webhook URLs, emails, API keys. Copy from *.example.py
+config/local_settings.py
+.env
+.env.*
+!.env.example
+credentials.json
+client_secret*.json
+*emails*.csv
+*emails*.txt
+*emails*.json
+""""

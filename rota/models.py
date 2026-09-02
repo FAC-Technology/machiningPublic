@@ -9,30 +9,47 @@ SLOT_PRIMARY = 1
 SLOT_SECONDARY = 2
 
 
+def _week_start_weekday():
+    return getattr(settings, "ROTA_WEEK_START_WEEKDAY", 3)
+
+
+def _skip_weekdays():
+    return tuple(getattr(settings, "ROTA_SKIP_WEEKDAYS", (4, 5, 6)))
+
+
 def week_start(day=None):
     day = day or timezone.localdate()
-    return day - timedelta(days=day.weekday())
+    offset = (day.weekday() - _week_start_weekday()) % 7
+    return day - timedelta(days=offset)
+
+
+def is_cover_day(day):
+    return day.weekday() not in _skip_weekdays()
+
+
+def calendar_days_for_week(start):
+    return [start + timedelta(days=i) for i in range(7)]
 
 
 def rota_days_for_week(start):
-    indexes = getattr(settings, "ROTA_WEEKDAY_INDEXES", (0, 1, 2, 3))
-    return [start + timedelta(days=i) for i in indexes]
+    return [day for day in calendar_days_for_week(start) if is_cover_day(day)]
+
+
+def cover_days_for_week(start):
+    return rota_days_for_week(start)
 
 
 def machining_date_for(day=None):
     day = day or timezone.localdate()
-    indexes = getattr(settings, "ROTA_WEEKDAY_INDEXES", (0, 1, 2, 3))
-    if day.weekday() in indexes:
+    if is_cover_day(day):
         return day
-    start = week_start(day)
-    days = rota_days_for_week(start)
-    if day.weekday() > max(indexes):
-        return days[-1]
-    return rota_days_for_week(start - timedelta(days=7))[-1]
+    return None
 
 
 def cover_for_date(day=None):
     day = machining_date_for(day)
+    if day is None:
+        return None, None
     assignments = {
         item.slot: item.machinist
         for item in RotaAssignment.objects.filter(date=day).select_related("machinist")

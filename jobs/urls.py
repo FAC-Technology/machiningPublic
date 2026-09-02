@@ -13,6 +13,7 @@ urlpatterns = [
     path("history/", views.history_page, name="history"),
     path("setup/", views.setup_page, name="setup"),
     path("setup/person/<int:pk>/toggle/", views.toggle_person, name="toggle_person"),
+    path("setup/person/<int:pk>/delete/", views.delete_person, name="delete_person"),
     path("setup/panel/<int:pk>/toggle/", views.toggle_panel, name="toggle_panel"),
     path("setup/panel/<int:pk>/delete/", views.delete_panel, name="delete_panel"),
     path("setup/project/<int:pk>/toggle/", views.toggle_project, name="toggle_project"),

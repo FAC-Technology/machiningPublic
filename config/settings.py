@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -82,5 +84,30 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024
 # Example: [r"Z:\\Machining"]
 SHARED_DRIVE_ROOTS = []
 
-# Machining week is Monday–Thursday.
-ROTA_WEEKDAY_INDEXES = (0, 1, 2, 3)
+# Machining week starts Thursday. Friday–Sunday are not on the rota.
+ROTA_WEEK_START_WEEKDAY = 3  # Thursday
+ROTA_SKIP_WEEKDAYS = (4, 5, 6)  # Friday, Saturday, Sunday
+
+# Incoming webhook for the shop Google Chat space. Leave empty to disable pings.
+# Put the real URL in config/local_settings.py (gitignored), not here.
+GOOGLE_CHAT_WEBHOOK_URL = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
+
+
+def _running_tests():
+    return len(sys.argv) > 1 and sys.argv[1] == "test"
+
+
+def _load_local_settings():
+    path = BASE_DIR / "config" / "local_settings.py"
+    if not path.is_file():
+        return
+    namespace = {"__file__": str(path)}
+    exec(compile(path.read_text(encoding="utf-8-sig"), str(path), "exec"), namespace)
+    for key, value in namespace.items():
+        if key.isupper():
+            globals()[key] = value
+
+
+# Shop secrets (webhook URL, emails). Skipped during tests.
+if not _running_tests():
+    _load_local_settings()

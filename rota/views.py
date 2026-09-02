@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from jobs.google_chat import chat_configured, post_week_rota
 from jobs.identity import current_person
 from jobs.models import Person
 
@@ -13,7 +14,10 @@ from .models import (
     SLOT_PRIMARY,
     SLOT_SECONDARY,
     RotaAssignment,
+    calendar_days_for_week,
+    cover_days_for_week,
     cover_for_date,
+    is_cover_day,
     rota_days_for_week,
     week_start,
 )
@@ -68,8 +72,15 @@ def rota_week(request):
             "can_edit": _can_edit(request),
             "today": today,
             "todays_cover": todays,
+            "chat_configured": chat_configured(),
         },
     )
+
+
+def _clear_skip_days(start):
+    skip = [day for day in calendar_days_for_week(start) if not is_cover_day(day)]
+    if skip:
+        RotaAssignment.objects.filter(date__in=skip).delete()
 
 
 @require_POST
@@ -79,7 +90,8 @@ def save_rota(request):
         return redirect("rota:week")
 
     start = _parse_week(request.POST.get("week"))
-    for day in rota_days_for_week(start):
+    _clear_skip_days(start)
+    for day in cover_days_for_week(start):
         key = day.isoformat()
         notes = request.POST.get(f"notes-{key}", "").strip()
         primary_id = request.POST.get(f"slot-{key}-{SLOT_PRIMARY}", "").strip()
@@ -114,7 +126,8 @@ def suggest_rota(request):
         messages.error(request, "Need at least two machinists to fill a two-person rota.")
         return redirect(f"{reverse('rota:week')}?week={start.isoformat()}")
 
-    for index, day in enumerate(rota_days_for_week(start)):
+    _clear_skip_days(start)
+    for index, day in enumerate(cover_days_for_week(start)):
         first = people[index % len(people)]
         second = people[(index + 1) % len(people)]
         RotaAssignment.objects.update_or_create(
@@ -125,3 +138,24 @@ def suggest_rota(request):
         )
     messages.success(request, "Filled this week with a rotating two-person cover.")
     return redirect(f"{reverse('rota:week')}?week={start.isoformat()}")
+
+
+@require_POST
+def notify_rota(request):
+    if not _can_edit(request):
+        messages.error(request, "Only an admin can post the rota to Chat.")
+        return redirect("rota:week")
+
+    start = _parse_week(request.POST.get("week"))
+    week_url = f"{reverse('rota:week')}?week={start.isoformat()}"
+    if not chat_configured():
+        messages.error(
+            request,
+            "Chat webhook is not set. Put GOOGLE_CHAT_WEBHOOK_URL in config/local_settings.py and restart the server.",
+        )
+        return redirect(week_url)
+    if post_week_rota(start):
+        messages.success(request, "Posted this week to Google Chat.")
+    else:
+        messages.error(request, "Could not post to Google Chat. Check the webhook URL and that this computer can reach Google.")
+    return redirect(week_url)

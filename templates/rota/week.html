@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Rota{% endblock %}
 {% block eyebrow %}Cover{% endblock %}
-{% block heading %}Four-day machining rota{% endblock %}
+{% block heading %}Thursday and Monday–Wednesday rota{% endblock %}
 
 {% block content %}
 <section class="panel">
@@ -10,8 +10,6 @@
         <strong>Week of {{ week_start|date:"d M Y" }}</strong>
         <a href="?week={{ next_week|date:'Y-m-d' }}">Next week</a>
     </div>
-    <p class="lede">Primary and secondary machinist for each day, Monday to Thursday. Everyone can see the rota; only an admin can change it.</p>
-
     <form method="post" action="{% url 'rota:save' %}">
         {% csrf_token %}
         <input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
@@ -76,10 +74,16 @@
     </form>
 
     {% if can_edit %}
+    <p class="muted">{% if chat_configured %}Google Chat is connected.{% else %}Google Chat webhook is not set. Put the URL in config/local_settings.py.{% endif %}</p>
     <form method="post" action="{% url 'rota:suggest' %}" class="suggest">
         {% csrf_token %}
         <input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
         <button type="submit">Fill week with rotating pairs</button>
+    </form>
+    <form method="post" action="{% url 'rota:notify' %}" class="suggest">
+        {% csrf_token %}
+        <input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
+        <button type="submit">Post this week to Chat</button>
     </form>
     {% endif %}
 </section>

@@ -8,12 +8,13 @@ from django.utils import timezone
 from rota.models import cover_for_date
 
 from .files import validate_typed_file
-from .models import Destination, Job, Panel, Person, Project
+from .models import Destination, Job, Panel, Person, Project, RD_PROJECT_NAME
 from .services import find_duplicate_jobs
 
 
 DEFAULT_PART_NUMBER = "PN-00000"
 PART_NUMBER_DIGITS = 5
+RD_NAME_MAX_LENGTH = 30
 
 
 def normalize_part_number(value):
@@ -34,6 +35,18 @@ class JobSubmitForm(forms.ModelForm):
         label="I've checked with the people involved and still want to submit this job",
     )
     destination = forms.ChoiceField()
+    rd_name = forms.CharField(
+        required=False,
+        max_length=RD_NAME_MAX_LENGTH,
+        label="Name",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Job name",
+                "id": "id_rd_name",
+                "maxlength": str(RD_NAME_MAX_LENGTH),
+            }
+        ),
+    )
 
     class Meta:
         model = Job
@@ -64,13 +77,19 @@ class JobSubmitForm(forms.ModelForm):
         self.duplicates = []
         self.uploads = {}
         self.fields["notes"].required = False
+        self.fields["job_name"].required = False
+        self.fields["part_version"].required = False
         self.fields["panel"].queryset = Panel.objects.filter(is_active=True)
         self.fields["project"].queryset = Project.objects.filter(is_active=True)
         self.fields["project"].empty_label = "Choose project"
+        rd = Project.objects.filter(name=RD_PROJECT_NAME, is_active=True).first()
+        self.rd_project_id = str(rd.pk) if rd else ""
         if not self.instance.pk:
             self.fields["deadline"].initial = timezone.localdate() + timedelta(days=7)
             self.fields["job_name"].initial = DEFAULT_PART_NUMBER
             self.fields["part_version"].initial = "1"
+        elif self.instance.is_rd:
+            self.fields["rd_name"].initial = self.instance.job_name
         self.fields["job_name"].widget.attrs.update({
             "id": "id_job_name",
             "spellcheck": "false",
@@ -113,7 +132,13 @@ class JobSubmitForm(forms.ModelForm):
         return (self.cleaned_data.get("notes") or "").strip()
 
     def clean_job_name(self):
-        return normalize_part_number(self.cleaned_data.get("job_name"))
+        return (self.cleaned_data.get("job_name") or "").strip()
+
+    def clean_rd_name(self):
+        return (self.cleaned_data.get("rd_name") or "").strip()
+
+    def clean_part_version(self):
+        return (self.cleaned_data.get("part_version") or "").strip()
 
     def clean_drawing_pdf(self):
         upload = self.cleaned_data.get("drawing_pdf")
@@ -164,7 +189,24 @@ class JobSubmitForm(forms.ModelForm):
         job_name = cleaned.get("job_name")
         project = cleaned.get("project")
         version = cleaned.get("part_version")
-        if job_name and project and version:
+        is_rd = bool(project and project.is_rd)
+        if is_rd:
+            name = cleaned.get("rd_name") or ""
+            if not name:
+                self.add_error("rd_name", "Enter a name.")
+            cleaned["job_name"] = name
+            cleaned["part_version"] = ""
+            version = ""
+            job_name = name
+        else:
+            if not job_name:
+                self.add_error("job_name", "Enter a part number.")
+            else:
+                job_name = normalize_part_number(job_name)
+                cleaned["job_name"] = job_name
+            if not version:
+                self.add_error("part_version", "Enter a part version.")
+        if job_name and project and (version or is_rd):
             self.duplicates = find_duplicate_jobs(
                 job_name,
                 project,
@@ -208,7 +250,6 @@ class MachinistUpdateForm(forms.ModelForm):
             "panel_used",
             "machinist_notes",
             "overdue_reason",
-            "materials_present",
         ]
         widgets = {
             "panel_used": forms.TextInput(attrs={"placeholder": "Panel name / batch if you have it"}),
@@ -216,16 +257,8 @@ class MachinistUpdateForm(forms.ModelForm):
             "overdue_reason": forms.Textarea(attrs={"rows": 2, "placeholder": "Why this job is still going after the deadline"}),
         }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["materials_present"].label = "Panel is in stock"
-        self.fields["machinist_notes"].required = False
-        self.fields["machinist_notes"].label = "Machinist notes (optional)"
-        if self.instance.pk and self.instance.is_overdue:
-            self.fields["overdue_reason"].required = True
-            self.fields["overdue_reason"].label = "Overdue reason"
-        else:
-            self.fields.pop("overdue_reason", None)
+    @classmethod
+    def rota_choices(cls):
         primary, secondary = cover_for_date()
         choices = [("", "Choose machinist")]
         seen = set()
@@ -235,9 +268,43 @@ class MachinistUpdateForm(forms.ModelForm):
         if secondary and secondary.pk not in seen:
             choices.append((str(secondary.pk), f"{secondary.initials} (secondary)"))
             seen.add(secondary.pk)
-        choices.append((self.OTHER, "Other"))
+        choices.append((cls.OTHER, "Other"))
+        return choices, seen
+
+    @classmethod
+    def person_from_choice(cls, choice, other):
+        choice = (choice or "").strip()
+        other = (other or "").strip().upper()
+        if choice == cls.OTHER:
+            if len(other) < 2:
+                return None, "Enter initials."
+            person = Person.objects.filter(initials__iexact=other).first()
+            if not person:
+                return None, "No one with those initials."
+            return person, None
+        if choice:
+            person = Person.objects.filter(pk=choice).first()
+            if not person:
+                return None, "Choose a machinist from the rota, or Other."
+            return person, None
+        return None, None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["machinist_notes"].required = False
+        self.fields["machinist_notes"].label = "Machinist notes (optional)"
+        if self.instance.pk and self.instance.is_overdue:
+            self.fields["overdue_reason"].required = True
+            self.fields["overdue_reason"].label = "Overdue reason"
+        else:
+            self.fields.pop("overdue_reason", None)
+        choices, seen = self.rota_choices()
         self.fields["machinist_choice"].choices = choices
-        self.fields["machinist_choice"].widget.attrs["id"] = "id_machinist_choice"
+        self.fields["machinist_choice"].widget.attrs.update({
+            "id": "id_machinist_choice",
+            "class": "js-machinist-choice",
+            "data-other-row": "machinist-other-row",
+        })
         self.fields["machinist_other"].widget.attrs["id"] = "id_machinist_other"
 
         current = self.instance.machinist_primary if self.instance.pk else None
@@ -252,20 +319,13 @@ class MachinistUpdateForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        choice = cleaned.get("machinist_choice") or ""
-        other = cleaned.get("machinist_other") or ""
-        person = None
-        if choice == self.OTHER:
-            if len(other) < 2:
-                self.add_error("machinist_other", "Enter initials.")
-            else:
-                person = Person.objects.filter(initials__iexact=other).first()
-                if not person:
-                    self.add_error("machinist_other", "No one with those initials.")
-        elif choice:
-            person = Person.objects.filter(pk=choice).first()
-            if not person:
-                self.add_error("machinist_choice", "Choose a machinist from the rota, or Other.")
+        person, error = self.person_from_choice(
+            cleaned.get("machinist_choice"),
+            cleaned.get("machinist_other"),
+        )
+        if error:
+            field = "machinist_other" if (cleaned.get("machinist_choice") or "") == self.OTHER else "machinist_choice"
+            self.add_error(field, error)
         cleaned["resolved_machinist"] = person
         return cleaned
 

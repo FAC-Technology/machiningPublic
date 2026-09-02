@@ -17,6 +17,13 @@ from .forms import (
     PersonForm,
     ProjectForm,
 )
+from .google_chat import (
+    job_is_in_top_queue,
+    notify_job_abandoned,
+    notify_job_cancelled,
+    notify_job_edited,
+    notify_job_started,
+)
 from .identity import current_person, set_current_person
 from .models import Destination, Job, Panel, Person, Project
 
@@ -45,6 +52,12 @@ def _require_admin(request):
         messages.error(request, "Only an admin can change people, panels, and projects.")
         return None
     return person
+
+
+def _last_active_admin(person):
+    if not (person.is_admin and person.is_active):
+        return False
+    return not Person.objects.filter(is_admin=True, is_active=True).exclude(pk=person.pk).exists()
 
 
 def _filtered_jobs(request, qs):
@@ -107,6 +120,8 @@ def submit_page(request, job=None):
             if any(form.uploads.values()):
                 write_job_files(saved, form.uploads)
                 saved.save()
+            if job:
+                notify_job_edited(saved)
             verb = "updated" if job else "added to the queue"
             messages.success(request, f"{saved.job_label} {verb} as {saved.job_id}.")
             return redirect("jobs:queue")
@@ -118,6 +133,7 @@ def submit_page(request, job=None):
             "form": form,
             "editing": job,
             "duplicates": getattr(form, "duplicates", []),
+            "cancel_form": CancelForm() if job else None,
         },
     )
 
@@ -181,7 +197,7 @@ def history_page(request):
 def job_detail(request, job_id):
     job = get_object_or_404(
         Job.objects.select_related(
-            "requested_by", "panel", "machinist_primary", "machinist_secondary"
+            "requested_by", "panel", "machinist_primary", "machinist_secondary", "project"
         ),
         job_id=job_id,
     )
@@ -191,7 +207,6 @@ def job_detail(request, job_id):
         {
             "job": job,
             "update_form": MachinistUpdateForm(instance=job),
-            "cancel_form": CancelForm(),
         },
     )
 
@@ -206,21 +221,28 @@ def update_job(request, job_id):
     action = request.POST.get("action")
 
     if action == "cancel":
+        if not actor.is_engineer:
+            messages.error(request, "Only an engineer can cancel a job.")
+            return redirect("jobs:detail", job_id=job.job_id)
         form = CancelForm(request.POST)
         if not job.can_edit_submission:
             messages.error(request, "Once machining has started, withdraw the job as abandoned instead of cancelling.")
             return redirect("jobs:detail", job_id=job.job_id)
         if form.is_valid():
+            in_top = job_is_in_top_queue(job)
             job.status = Job.Status.CANCELLED
             job.cancel_reason = form.cleaned_data["cancel_reason"]
             job.finished_at = timezone.now()
             job.save()
+            if in_top:
+                notify_job_cancelled(job, actor)
             messages.success(request, f"{job.job_id} cancelled and moved to history.")
             return redirect("jobs:history")
         messages.error(request, "Give a reason to cancel the job.")
-        return redirect("jobs:detail", job_id=job.job_id)
+        return redirect("jobs:edit", job_id=job.job_id)
 
-    if "machinist_choice" in request.POST:
+    from_job_page = "panel_used" in request.POST
+    if from_job_page:
         form = MachinistUpdateForm(request.POST, instance=job)
         if not form.is_valid():
             messages.error(request, "Check the machinist field and try again.")
@@ -230,23 +252,33 @@ def update_job(request, job_id):
                 {
                     "job": job,
                     "update_form": form,
-                    "cancel_form": CancelForm(),
                 },
             )
         job = form.save(commit=False)
+    elif "machinist_choice" in request.POST:
+        person, error = MachinistUpdateForm.person_from_choice(
+            request.POST.get("machinist_choice"),
+            request.POST.get("machinist_other"),
+        )
+        if error:
+            messages.error(request, error)
+            if request.POST.get("next"):
+                return redirect(request.POST.get("next"))
+            return redirect("jobs:detail", job_id=job.job_id)
+        if person:
+            job.machinist_primary = person
+            job.machinist_secondary = None
 
-    if job.is_overdue and not (job.overdue_reason or "").strip() and action in {"start", "complete", "hold"}:
+    if job.is_overdue and not (job.overdue_reason or "").strip() and action in {"start", "complete"}:
         messages.error(request, "This job missed its deadline. Add an overdue reason before continuing.")
         return redirect("jobs:detail", job_id=job.job_id)
 
     if action == "start":
-        if not job.materials_present:
-            job.status = Job.Status.ON_HOLD
-            job.save()
-            messages.error(request, "Material is not marked as in stock, so the job is on hold.")
+        if not job.machinist_primary:
+            messages.error(request, "Select a machinist before starting.")
+            if request.POST.get("next"):
+                return redirect(request.POST.get("next"))
             return redirect("jobs:detail", job_id=job.job_id)
-        if actor.is_machinist and not job.machinist_primary:
-            job.machinist_primary = actor
         job.status = Job.Status.IN_PROGRESS
         job.started_at = job.started_at or timezone.now()
         job.finished_at = None
@@ -261,13 +293,22 @@ def update_job(request, job_id):
         job.started_at = job.started_at or timezone.now()
         job.finished_at = timezone.now()
     elif action == "abandon":
+        if not job.started_at:
+            messages.error(request, "Start machining before abandoning the job.")
+            return redirect("jobs:detail", job_id=job.job_id)
+        reason = (request.POST.get("abandon_reason") or "").strip()
+        if not reason:
+            messages.error(request, "Give a reason to abandon the job.")
+            return redirect("jobs:detail", job_id=job.job_id)
         job.status = Job.Status.ABANDONED
+        job.abandon_reason = reason
         job.finished_at = timezone.now()
-    elif action == "hold":
-        job.status = Job.Status.ON_HOLD
-        job.materials_present = False
 
     job.save()
+    if action == "start":
+        notify_job_started(job)
+    elif action == "abandon":
+        notify_job_abandoned(job, actor)
     messages.success(request, f"{job.job_id} updated.")
     if job.status in (Job.Status.COMPLETED, Job.Status.ABANDONED, Job.Status.CANCELLED):
         return redirect("jobs:history")
@@ -290,17 +331,34 @@ def job_file_view(request, job_id, kind):
 def setup_page(request):
     if not _require_admin(request):
         return redirect("jobs:queue")
-    person_form = PersonForm(prefix="person")
+    editing_person = None
+    edit_pk = request.POST.get("person_pk") or request.GET.get("edit_person")
+    if edit_pk:
+        editing_person = Person.objects.filter(pk=edit_pk).first()
+    person_form = PersonForm(prefix="person", instance=editing_person)
     panel_form = PanelForm(prefix="panel")
     project_form = ProjectForm(prefix="project")
     destination_form = DestinationForm(prefix="destination")
     if request.method == "POST":
         if "add_person" in request.POST:
             person_form = PersonForm(request.POST, prefix="person")
+            editing_person = None
             if person_form.is_valid():
                 person_form.save()
                 messages.success(request, "Person added.")
                 return redirect("jobs:setup")
+        elif "save_person" in request.POST:
+            if not editing_person:
+                messages.error(request, "Choose someone to edit.")
+                return redirect("jobs:setup")
+            person_form = PersonForm(request.POST, prefix="person", instance=editing_person)
+            if person_form.is_valid():
+                if _last_active_admin(editing_person) and not person_form.cleaned_data.get("is_admin"):
+                    person_form.add_error("is_admin", "Keep at least one active admin.")
+                else:
+                    person_form.save()
+                    messages.success(request, "Person updated.")
+                    return redirect("jobs:setup")
         elif "add_panel" in request.POST:
             panel_form = PanelForm(request.POST, prefix="panel")
             if panel_form.is_valid():
@@ -327,6 +385,7 @@ def setup_page(request):
             "panel_form": panel_form,
             "project_form": project_form,
             "destination_form": destination_form,
+            "editing_person": editing_person,
             "people": Person.objects.all(),
             "panels": Panel.objects.all(),
             "projects": Project.objects.all(),
@@ -340,8 +399,36 @@ def toggle_person(request, pk):
     if not _require_admin(request):
         return redirect("jobs:queue")
     person = get_object_or_404(Person, pk=pk)
+    if person.is_active and _last_active_admin(person):
+        messages.error(request, "Keep at least one active admin.")
+        return redirect("jobs:setup")
     person.is_active = not person.is_active
     person.save(update_fields=["is_active"])
+    return redirect("jobs:setup")
+
+
+@require_POST
+def delete_person(request, pk):
+    if not _require_admin(request):
+        return redirect("jobs:queue")
+    person = get_object_or_404(Person, pk=pk)
+    actor = current_person(request)
+    if actor and actor.pk == person.pk:
+        messages.error(request, "You can't delete the person you are working as.")
+        return redirect("jobs:setup")
+    if _last_active_admin(person):
+        messages.error(request, "Keep at least one active admin.")
+        return redirect("jobs:setup")
+    initials = person.initials
+    try:
+        person.delete()
+        messages.success(request, f"Deleted {initials}.")
+    except ProtectedError:
+        count = person.submitted_jobs.count()
+        messages.error(
+            request,
+            f"Can't delete {initials} — {count} job(s) still use them. Deactivate them instead.",
+        )
     return redirect("jobs:setup")
 
 

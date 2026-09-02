@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ job.job_id }}{% endblock %}
 {% block eyebrow %}{{ job.job_id }}{% endblock %}
-{% block heading %}{{ job.job_label }}{% endblock %}
+{% block heading %}{{ job.job_id }}{% endblock %}
 
 {% block content %}
 <section class="split">
@@ -12,7 +12,11 @@
             <div><dt>Priority</dt><dd><span class="pill prio-{{ job.effective_priority }}">{{ job.get_priority_display }}</span>{% if job.is_overdue %} <span class="pill status-abandoned">Overdue</span>{% endif %}</dd></div>
             <div><dt>Status</dt><dd><span class="pill status-{{ job.status }}">{{ job.get_status_display }}</span></dd></div>
             <div><dt>Project</dt><dd>{{ job.project }}</dd></div>
+            {% if job.is_rd %}
+            <div><dt>Name</dt><dd>{{ job.job_name }}</dd></div>
+            {% else %}
             <div><dt>Part</dt><dd>{{ job.job_name }} · v{{ job.part_version }}</dd></div>
+            {% endif %}
             <div><dt>Quantity</dt><dd>{{ job.quantity }}</dd></div>
             <div><dt>Panel</dt><dd>{{ job.panel.name }}</dd></div>
             <div><dt>Deadline</dt><dd>{{ job.deadline|date:"d M Y" }}</dd></div>
@@ -26,6 +30,7 @@
         <p>{{ job.notes|default:"—" }}</p>
         {% if job.machinist_notes %}<h3>Machinist notes</h3><p>{{ job.machinist_notes }}</p>{% endif %}
         {% if job.cancel_reason %}<h3>Cancel reason</h3><p>{{ job.cancel_reason }}</p>{% endif %}
+        {% if job.abandon_reason %}<h3>Abandon reason</h3><p>{{ job.abandon_reason }}</p>{% endif %}
         {% if job.overdue_reason %}<h3>Overdue reason</h3><p>{{ job.overdue_reason }}</p>{% endif %}
 
         <h3>Files</h3>
@@ -36,9 +41,6 @@
             {% endif %}
             {% endfor %}
         </p>
-        {% if job.pdf_filename %}
-        <iframe class="pdf-preview" src="{% url 'jobs:file' job.job_id 'pdf' %}" title="PDF drawing"></iframe>
-        {% endif %}
         {% if job.can_edit_submission %}
         <div class="inline-actions">
             <a class="file-link" href="{% url 'jobs:edit' job.job_id %}">Edit job</a>
@@ -49,7 +51,7 @@
     <aside class="panel">
         {% if job.is_open %}
         <h2>Update this job</h2>
-        <p class="hint">Pick today's primary or secondary from the rota, or Other to type initials. Start machining saves the update and stamps the time. Material must be in stock before a job can leave queued / on hold.</p>
+        <p class="hint">Pick today's primary or secondary from the rota, or Other to type initials. Start machining saves the update and stamps the time.</p>
         <form method="post" action="{% url 'jobs:update' job.job_id %}" class="job-form" id="update-job-form">
             {% csrf_token %}
             <label>Machinist {{ update_form.machinist_choice }} {{ update_form.machinist_choice.errors }}</label>
@@ -61,26 +63,28 @@
             {% if update_form.overdue_reason %}
             <label>Overdue reason {{ update_form.overdue_reason }} {{ update_form.overdue_reason.errors }}</label>
             {% endif %}
-            <label class="checkbox">{{ update_form.materials_present }} {{ update_form.materials_present.label }}</label>
             <div class="inline-actions">
                 {% if job.status != "in_progress" %}
                 <button name="action" value="start" class="primary">Start machining</button>
                 {% endif %}
                 {% if job.started_at %}
                 <button name="action" value="complete">Complete</button>
+                <button type="button" class="danger" id="abandon-open">Abandon</button>
                 {% endif %}
-                <button name="action" value="hold">On hold</button>
-                <button name="action" value="abandon" class="danger">Abandon</button>
             </div>
-        </form>
-        {% endif %}
-
-        {% if job.can_edit_submission %}
-        <h2>Cancel / withdraw</h2>
-        <form method="post" action="{% url 'jobs:update' job.job_id %}">
-            {% csrf_token %}
-            {{ cancel_form.as_p }}
-            <button name="action" value="cancel" class="danger">Cancel job</button>
+            {% if job.started_at %}
+            <dialog id="abandon-dialog" class="abandon-dialog">
+                <h2>Abandon this job</h2>
+                <p class="hint">This cannot be restarted. Submit a new job if the work still needs doing.</p>
+                <label>Abandon reason
+                    <textarea name="abandon_reason" rows="3" placeholder="Why is this job being abandoned?"></textarea>
+                </label>
+                <div class="inline-actions">
+                    <button type="submit" name="action" value="abandon" class="danger">Abandon job</button>
+                    <button type="button" id="abandon-cancel">Back</button>
+                </div>
+            </dialog>
+            {% endif %}
         </form>
         {% endif %}
     </aside>

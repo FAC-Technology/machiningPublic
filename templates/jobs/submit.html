@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{% if editing %}Edit {{ editing.job_id }}{% else %}Submit a job{% endif %}{% endblock %}
 {% block eyebrow %}Engineer{% endblock %}
-{% block heading %}{% if editing %}Edit {{ editing.job_label }}{% else %}Submit a machining job{% endif %}{% endblock %}
+{% block heading %}{% if editing %}Edit {{ editing.job_id }}{% else %}Submit a machining job{% endif %}{% endblock %}
 
 {% block content %}
 <section class="panel">
-    <p class="lede">Drop the three drawing files into one box. The page checks each type and shows which of PDF, DXF, and VCarve are attached. Submission date is stored as today. Deadline defaults to a week from today. Notes are optional.</p>
-    <form method="post" class="job-form" id="job-form" enctype="multipart/form-data" data-editing="{% if editing %}1{% else %}0{% endif %}">
+    <form method="post" class="job-form" id="job-form" enctype="multipart/form-data" data-editing="{% if editing %}1{% else %}0{% endif %}" data-rd-project-id="{{ form.rd_project_id }}">
         {% csrf_token %}
         {{ form.non_field_errors }}
         <div class="grid-3">
             <label>Priority {{ form.priority }} {{ form.priority.errors }}</label>
             <label>Deadline {{ form.deadline }} {{ form.deadline.errors }}</label>
             <label>Project {{ form.project }} {{ form.project.errors }}</label>
-            <label>Part number {{ form.job_name }} {{ form.job_name.errors }}</label>
-            <label>Part version {{ form.part_version }} {{ form.part_version.errors }}</label>
+            <label id="part-number-field">Part number {{ form.job_name }} {{ form.job_name.errors }}</label>
+            <label id="part-version-field">Part version {{ form.part_version }} {{ form.part_version.errors }}</label>
+            <label id="rd-name-field" hidden>Name {{ form.rd_name }} {{ form.rd_name.errors }}</label>
             <label>Quantity (1–100) {{ form.quantity }} {{ form.quantity.errors }}</label>
             <label>Material / panel {{ form.panel }} {{ form.panel.errors }}</label>
             <label>Destination {{ form.destination }} {{ form.destination.errors }}</label>
@@ -44,7 +44,7 @@
         <div class="warn-box">
             <p>This looks like a job that is already on the system.</p>
             {% for item in form.duplicates %}
-            <p><a href="{% url 'jobs:detail' item.job_id %}">{{ item.job_id }} · {{ item.job_label }}</a> ({{ item.get_status_display }})</p>
+            <p><a href="{% url 'jobs:detail' item.job_id %}">{{ item.job_id }}</a> ({{ item.get_status_display }})</p>
             {% endfor %}
             <label class="stock">{{ form.acknowledge_duplicate }} {{ form.acknowledge_duplicate.label }} {{ form.acknowledge_duplicate.errors }}</label>
         </div>
@@ -52,5 +52,14 @@
 
         <button type="submit" class="primary">{% if editing %}Save changes{% else %}Add to queue{% endif %}</button>
     </form>
+
+    {% if editing and editing.can_edit_submission and current_person and current_person.is_engineer and cancel_form %}
+    <h2>Cancel / withdraw</h2>
+    <form method="post" action="{% url 'jobs:update' editing.job_id %}" class="job-form">
+        {% csrf_token %}
+        {{ cancel_form.as_p }}
+        <button name="action" value="cancel" class="danger">Cancel job</button>
+    </form>
+    {% endif %}
 </section>
 {% endblock %}

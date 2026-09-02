@@ -199,15 +199,81 @@ function bindPartNumber(input) {
 
 bindPartNumber(document.getElementById("id_job_name"));
 
-function bindMachinistChoice() {
-    const select = document.getElementById("id_machinist_choice");
-    const otherRow = document.getElementById("machinist-other-row");
-    if (!select || !otherRow) return;
-    function sync() {
-        otherRow.hidden = select.value !== "other";
+function bindRdProjectFields() {
+    const form = document.getElementById("job-form");
+    if (!form) return;
+    const rdId = form.dataset.rdProjectId;
+    const project = form.querySelector('[name="project"]');
+    const partNumber = document.getElementById("part-number-field");
+    const partVersion = document.getElementById("part-version-field");
+    const rdName = document.getElementById("rd-name-field");
+    if (!project || !partNumber || !partVersion || !rdName) return;
+
+    function setDisabled(field, disabled) {
+        field.querySelectorAll("input, select, textarea").forEach((el) => {
+            el.disabled = disabled;
+        });
     }
-    select.addEventListener("change", sync);
+
+    function sync() {
+        const isRd = Boolean(rdId) && project.value === rdId;
+        partNumber.hidden = isRd;
+        partVersion.hidden = isRd;
+        rdName.hidden = !isRd;
+        setDisabled(partNumber, isRd);
+        setDisabled(partVersion, isRd);
+        setDisabled(rdName, !isRd);
+    }
+
+    project.addEventListener("change", sync);
     sync();
 }
 
+bindRdProjectFields();
+
+bindLetterInitials(document.getElementById("id_person-initials"));
+
+function bindLetterInitials(input) {
+    if (!input) return;
+    input.addEventListener("input", () => {
+        const next = input.value.replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase();
+        if (input.value === next) return;
+        input.value = next;
+        input.setSelectionRange(next.length, next.length);
+    });
+}
+
+function bindMachinistChoice() {
+    document.querySelectorAll(".js-machinist-choice").forEach((select) => {
+        const otherRow = document.getElementById(select.dataset.otherRow);
+        if (!otherRow) return;
+        function sync() {
+            otherRow.hidden = select.value !== "other";
+        }
+        select.addEventListener("change", sync);
+        sync();
+    });
+}
+
 bindMachinistChoice();
+
+function bindAbandonDialog() {
+    const dialog = document.getElementById("abandon-dialog");
+    const open = document.getElementById("abandon-open");
+    const cancel = document.getElementById("abandon-cancel");
+    if (!dialog || !open) return;
+    const reason = dialog.querySelector("[name=abandon_reason]");
+    open.addEventListener("click", () => dialog.showModal());
+    if (cancel) cancel.addEventListener("click", () => dialog.close());
+    const confirm = dialog.querySelector("[value='abandon']");
+    if (confirm && reason) {
+        confirm.addEventListener("click", (event) => {
+            if (!reason.value.trim()) {
+                event.preventDefault();
+                reason.focus();
+            }
+        });
+    }
+}
+
+bindAbandonDialog();

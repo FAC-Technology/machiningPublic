@@ -3,6 +3,8 @@ from django.db import models
 from django.db.models import Case, IntegerField, When
 from django.utils import timezone
 
+RD_PROJECT_NAME = "R&D"
+
 
 class Person(models.Model):
     name = models.CharField(max_length=120)
@@ -60,6 +62,10 @@ class Project(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def is_rd(self):
+        return self.name == RD_PROJECT_NAME
+
 
 class Destination(models.Model):
     name = models.CharField(max_length=120, unique=True)
@@ -85,12 +91,17 @@ class JobQuerySet(models.QuerySet):
     def with_queue_order(self):
         today = timezone.localdate()
         return self.annotate(
+            sort_in_progress=Case(
+                When(status="in_progress", then=0),
+                default=1,
+                output_field=IntegerField(),
+            ),
             sort_priority=Case(
                 When(deadline__lt=today, then=0),
                 default="priority",
                 output_field=IntegerField(),
-            )
-        ).order_by("sort_priority", "deadline", "created_at")
+            ),
+        ).order_by("sort_in_progress", "sort_priority", "deadline", "created_at")
 
 
 class Job(models.Model):
@@ -112,7 +123,7 @@ class Job(models.Model):
     job_label = models.CharField(max_length=240, blank=True)
     job_name = models.CharField("Part number", max_length=200)
     project = models.ForeignKey("Project", on_delete=models.PROTECT, related_name="jobs")
-    part_version = models.CharField(max_length=50)
+    part_version = models.CharField(max_length=50, blank=True)
     requested_by = models.ForeignKey(
         Person,
         on_delete=models.PROTECT,
@@ -139,6 +150,7 @@ class Job(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
     materials_present = models.BooleanField(default=False)
     cancel_reason = models.TextField(blank=True)
+    abandon_reason = models.TextField(blank=True)
     overdue_reason = models.TextField(blank=True)
 
     machinist_primary = models.ForeignKey(
@@ -186,6 +198,8 @@ class Job(models.Model):
         initials = self.requested_by.initials.upper()
         project = _token(self.project.name if self.project_id else "")
         part = _token(self.job_name)
+        if self.is_rd:
+            return f"{day}_{initials}_{project}-{part}"
         version = _token(self.part_version)
         return f"{day}_{initials}_{project}-{part}-{version}"
 
@@ -195,6 +209,10 @@ class Job(models.Model):
             raise ValidationError({"quantity": "Quantity must be between 1 and 100."})
         if not self.pk and self.deadline and self.deadline < timezone.localdate():
             raise ValidationError({"deadline": "Deadline cannot be before today."})
+
+    @property
+    def is_rd(self):
+        return bool(self.project_id) and self.project.is_rd
 
     @property
     def is_overdue(self):
@@ -225,3 +243,14 @@ class Job(models.Model):
 
 def _token(value):
     return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in value.strip())
+
+
+class CoverPing(models.Model):
+    date = models.DateField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return str(self.date)
